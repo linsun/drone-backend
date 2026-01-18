@@ -1,0 +1,6 @@
+numpy==1.26.4
+djitellopy==2.5.0
+flask==3.0.0
+flask-cors==4.0.0
+flask-sock==0.7.0
+opencv-python==4.10.0.84
