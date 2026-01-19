@@ -1,17 +1,14 @@
-# Use Python 3.11 slim image for smaller size
-FROM python:3.11-slim
+FROM python:3.12-slim
 
-# Set working directory
 WORKDIR /app
 
 # Install system dependencies for OpenCV
 RUN apt-get update && apt-get install -y \
-    libgl1 \
+    libgl1-mesa-glx \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
-    libxrender1 \
-    libgomp1 \
+    libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements file
@@ -26,11 +23,8 @@ COPY server.py .
 # Create directories for photos and videos
 RUN mkdir -p photos videos
 
-# Expose port 3001
+# Expose port
 EXPOSE 3001
-
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
 
 # Run the application
 CMD ["python", "server.py"]

@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tello-backend
+  labels:
+    app: tello-backend
+spec:
+  replicas: 1  # Only 1 replica since we need direct connection to the drone
+  selector:
+    matchLabels:
+      app: tello-backend
+  template:
+    metadata:
+      labels:
+        app: tello-backend
+    spec:
+      containers:
+      - name: tello-backend
+        image: tello-backend:latest  # You'll need to build this image
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3001
+          name: http
+          protocol: TCP
+        env:
+        - name: FLASK_ENV
+          value: "production"
+        hostNetwork: true
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: photos
+          mountPath: /app/photos
+        livenessProbe:
+          httpGet:
+            path: /api/status
+            port: 3001
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /api/status
+            port: 3001
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      volumes:
+      - name: photos
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tello-backend
+  labels:
+    app: tello-backend
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3001
+    targetPort: 3001
+    protocol: TCP
+    name: http
+  selector:
+    app: tello-backend

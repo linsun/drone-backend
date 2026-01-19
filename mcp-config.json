@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "tello-drone": {
+      "command": "python",
+      "args": ["/Users/linsun/src/github.com/linsun/tello-backend/mcp_server.py"],
+      "env": {
+        "PYTHONPATH": "/Users/linsun/src/github.com/linsun/tello-backend/venv/lib/python3.12/site-packages"
+      }
+    }
+  }
+}
