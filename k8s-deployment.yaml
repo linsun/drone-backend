@@ -16,42 +16,48 @@ spec:
     spec:
       containers:
       - name: tello-backend
-        image: tello-backend:latest  # You'll need to build this image
-        imagePullPolicy: IfNotPresent
+        image: linsun/tello-backend:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 3001
           name: http
           protocol: TCP
+        - containerPort: 3002
+          name: mcp
+          protocol: TCP
         env:
-        - name: FLASK_ENV
-          value: "production"
-        hostNetwork: true
+        - name: TELLO_PROXY_URL
+          value: "http://host.docker.internal:50000"
+        - name: USE_TELLO_PROXY
+          value: "true"
+        - name: HTTP_PORT
+          value: "3001"
+        - name: MCP_PORT
+          value: "3002"
         resources:
           requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
             memory: "256Mi"
             cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
-        volumeMounts:
-        - name: photos
-          mountPath: /app/photos
         livenessProbe:
           httpGet:
             path: /api/status
             port: 3001
-          initialDelaySeconds: 10
-          periodSeconds: 30
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
         readinessProbe:
           httpGet:
             path: /api/status
             port: 3001
           initialDelaySeconds: 5
           periodSeconds: 10
-      volumes:
-      - name: photos
-        emptyDir: {}
+          timeoutSeconds: 5
 ---
+# Service for accessing the backend from within the cluster and externally
 apiVersion: v1
 kind: Service
 metadata:
@@ -59,11 +65,15 @@ metadata:
   labels:
     app: tello-backend
 spec:
-  type: ClusterIP
+  type: NodePort
   ports:
   - port: 3001
     targetPort: 3001
     protocol: TCP
     name: http
+  - port: 3002
+    targetPort: 3002
+    protocol: TCP
+    name: mcp
   selector:
     app: tello-backend

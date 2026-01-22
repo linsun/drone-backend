@@ -2,13 +2,9 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system dependencies for OpenCV
+# Install minimal system dependencies
 RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements file
@@ -17,14 +13,17 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY server.py .
+# Copy backend application code
+COPY tello_proxy_adapter.py .
+COPY backend_http_server.py .
+COPY backend_mcp_server.py .
+COPY start_backend.sh .
 
-# Create directories for photos and videos
-RUN mkdir -p photos videos
+# Make startup script executable
+RUN chmod +x start_backend.sh
 
-# Expose port
-EXPOSE 3001
+# Expose ports for HTTP API and MCP server
+EXPOSE 3001 3002
 
-# Run the application
-CMD ["python", "server.py"]
+# Run both backend servers
+CMD ["./start_backend.sh"]
