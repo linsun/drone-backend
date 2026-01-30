@@ -15,13 +15,30 @@ Accessible at:
     http://localhost:3001/api/*
 """
 
+import os
+import sys
+
+# Ensure script directory is on path so "github_pr" can be imported when run from any cwd (e.g. Docker /app)
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+if _script_dir not in sys.path:
+    sys.path.insert(0, _script_dir)
+
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import os
 from tello_proxy_adapter import create_tello
 
 app = Flask(__name__)
+# Allow large JSON payloads (base64 photos) for /api/github-pr
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB
 CORS(app)
+
+
+@app.after_request
+def add_private_network_access(resp):
+    """Allow browser requests from other origins to this server (e.g. localhost:3000 → localhost:3001)."""
+    if resp.headers.get('Access-Control-Allow-Origin') is not None:
+        resp.headers['Access-Control-Allow-Private-Network'] = 'true'
+    return resp
 
 # Global Tello instance (will be TelloProxyAdapter)
 tello = None
@@ -283,14 +300,14 @@ def flip():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/start_stream', methods=['POST'])
+@app.route('/api/start-stream', methods=['POST'])
 def start_stream():
     """Start video stream (via proxy)"""
     proxy_url = os.getenv('TELLO_PROXY_URL', 'http://host.docker.internal:50000')
 
     try:
         import requests
-        response = requests.post(f'{proxy_url}/tello/start_stream', timeout=10)
+        response = requests.post(f'{proxy_url}/api/start-stream', timeout=10)
         data = response.json()
 
         if data.get('success'):
@@ -298,7 +315,7 @@ def start_stream():
             return jsonify({
                 'success': True,
                 'message': 'Video stream started',
-                'video_url': f'{proxy_url}/tello/video_feed'
+                'video_url': f'{proxy_url}/api/video-feed'
             })
         else:
             return jsonify({
@@ -308,21 +325,21 @@ def start_stream():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/stop_stream', methods=['POST'])
+@app.route('/api/stop-stream', methods=['POST'])
 def stop_stream():
     """Stop video stream (via proxy)"""
     proxy_url = os.getenv('TELLO_PROXY_URL', 'http://host.docker.internal:50000')
 
     try:
         import requests
-        response = requests.post(f'{proxy_url}/tello/stop_stream', timeout=10)
+        response = requests.post(f'{proxy_url}/api/stop-stream', timeout=10)
         data = response.json()
 
         return jsonify(data)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/video_feed')
+@app.route('/api/video-feed')
 def video_feed_proxy():
     """Proxy video feed from Mac proxy"""
     proxy_url = os.getenv('TELLO_PROXY_URL', 'http://host.docker.internal:50000')
@@ -332,7 +349,7 @@ def video_feed_proxy():
 
     def generate():
         try:
-            response = requests.get(f'{proxy_url}/tello/video_feed', stream=True, timeout=30)
+            response = requests.get(f'{proxy_url}/api/video-feed', stream=True, timeout=30)
             for chunk in response.iter_content(chunk_size=1024):
                 if chunk:
                     yield chunk
@@ -341,19 +358,56 @@ def video_feed_proxy():
 
     return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
-@app.route('/api/capture_photo', methods=['POST'])
+@app.route('/api/capture', methods=['POST'])
 def capture_photo():
     """Capture photo (via proxy)"""
     proxy_url = os.getenv('TELLO_PROXY_URL', 'http://host.docker.internal:50000')
 
     try:
         import requests
-        response = requests.post(f'{proxy_url}/tello/capture_photo', timeout=10)
+        response = requests.post(f'{proxy_url}/api/capture', timeout=10)
         data = response.json()
 
         return jsonify(data)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/github-pr', methods=['POST'])
+def github_pr():
+    """
+    Create a PR in a GitHub repo with photo1, photo2, and LLaVA/Qwen3-VL analysis.
+    Uses GitHub MCP for branch + markdown; GitHub API for images and PR.
+    """
+    try:
+        from github_pr import create_pr_payload
+    except ImportError:
+        return jsonify({'success': False, 'error': 'github_pr module not available'}), 500
+
+    data = request.get_json() or {}
+    repo = data.get('repo', '').strip()
+    photo1_base64 = data.get('photo1Base64', '')
+    photo2_base64 = data.get('photo2Base64', '')
+    comparison_llava = data.get('comparisonLlava', '')
+    comparison_qwen = data.get('comparisonQwen', '')
+
+    if not repo:
+        return jsonify({'success': False, 'error': 'Missing repo'}), 400
+    if not photo1_base64 or not photo2_base64:
+        return jsonify({'success': False, 'error': 'Missing photo1Base64 or photo2Base64'}), 400
+
+    result = create_pr_payload(
+        repo_slug=repo,
+        photo1_base64=photo1_base64,
+        photo2_base64=photo2_base64,
+        comparison_llava=comparison_llava,
+        comparison_qwen=comparison_qwen,
+    )
+
+    if result['success']:
+        return jsonify({'success': True, 'prUrl': result['prUrl']})
+    return jsonify({'success': False, 'error': result.get('error', 'Unknown error')}), 500
+
 
 if __name__ == '__main__':
     proxy_url = os.getenv('TELLO_PROXY_URL', 'http://host.docker.internal:50000')
@@ -379,10 +433,11 @@ if __name__ == '__main__':
     print("  POST /api/move")
     print("  POST /api/rotate")
     print("  POST /api/flip")
-    print("  POST /api/start_stream       ← Start video")
-    print("  POST /api/stop_stream        ← Stop video")
-    print("  GET  /api/video_feed         ← Video stream (MJPEG)")
-    print("  POST /api/capture_photo      ← Take photo")
+    print("  POST /api/start-stream       ← Start video")
+    print("  POST /api/stop-stream        ← Stop video")
+    print("  GET  /api/video-feed         ← Video stream (MJPEG)")
+    print("  POST /api/capture            ← Take photo")
+    print("  POST /api/github-pr          ← Create PR (photos + LLaVA/Qwen analysis)")
     print("=" * 60)
 
     app.run(host='0.0.0.0', port=http_port, debug=False)

@@ -19,6 +19,7 @@ import os
 from typing import Optional
 from tello_proxy_adapter import create_tello
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 import time
 
 # Global Tello instance (will be TelloProxyAdapter)
@@ -30,7 +31,13 @@ mcp = FastMCP(
     "tello-backend",
     dependencies=["requests"],  # Only need requests for proxy calls
     stateless_http=True,  # Enable stateless HTTP mode
-    json_response=True    # Use JSON responses
+    json_response=True,
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        # Add your specific gateway or domain here
+        allowed_hosts=["localhost:*", "127.0.0.1:*", "agw.mcp.svc.cluster.local:*", "tello-backend.mcp.svc.cluster.local:*", "backend.mcp.svc.cluster.local:*"],
+        allowed_origins=["http://localhost:*", "http://agw.mcp.svc.cluster.local:*"],
+    )
 )
 
 def ensure_connected() -> tuple[bool, str]:

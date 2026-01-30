@@ -34,6 +34,16 @@ spec:
           value: "3001"
         - name: MCP_PORT
           value: "3002"
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: github-mcp-secret
+              key: GITHUB_PERSONAL_ACCESS_TOKEN
+        - name: GITHUB_MCP_SERVER_URL
+          value: "http://agentgateway.mcp.svc.cluster.local:3000/mcp"
+        # Optional: event name for PR branch/folder/title (e.g. "field-day-2025"). If unset, timestamp is used.
+        - name: GITHUB_PR_EVENT_NAME
+          value: ""
         resources:
           requests:
             memory: "128Mi"

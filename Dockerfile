@@ -17,6 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY tello_proxy_adapter.py .
 COPY backend_http_server.py .
 COPY backend_mcp_server.py .
+COPY github_pr.py .
 COPY start_backend.sh .
 
 # Make startup script executable
